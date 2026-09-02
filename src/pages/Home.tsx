@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 export default function Home() {
   return (
     <section className="card hero">
-      <h1>Mam pytanko</h1>
+      <h1>Pytaj na zajęciach</h1>
       <p>
         Prywatny kanał kontaktu student → prowadzący. Każdy student widzi wyłącznie swój wątek.
       </p>

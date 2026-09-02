@@ -449,3 +449,34 @@ select:focus { border-color: #3b82f6; }
   .toolbar-actions { width: 100%; }
   .toolbar-actions .btn { flex: 1; text-align: center; }
 }
+
+.session-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-delete {
+  background: #450a0a;
+  border: 1px solid #7f1d1d;
+  color: #fecaca;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #7f1d1d;
+}
+
+.btn-delete:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.session-delete-error {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 600px) {
+  .session-actions { width: 100%; }
+  .session-actions .btn { flex: 1; }
+}

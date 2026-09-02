@@ -53,6 +53,8 @@ export default function TeacherPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingSession, setDeletingSession] = useState(false);
   const navigate = useNavigate();
 
   async function ensureAuth() {
@@ -258,6 +260,38 @@ export default function TeacherPanel() {
     await loadSessions();
   }
 
+  async function deleteSession() {
+    if (!selectedSession || deletingSession) return;
+
+    const label = `${selectedSession.subject} (${selectedSession.code})`;
+    const confirmed = window.confirm(
+      `Usunąć chat „${label}”?\n\nZostaną trwale usunięte wszystkie wątki, wiadomości i załączniki z tego chatu. Tej operacji nie można cofnąć.`
+    );
+    if (!confirmed) return;
+
+    setDeleteError("");
+    setDeletingSession(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-session", {
+        body: { sessionId: selectedSession.id },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setSelectedSession(null);
+      setSelectedThread(null);
+      setThreads([]);
+      setMessages([]);
+      await loadSessions();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Nie udało się usunąć chatu.");
+    } finally {
+      setDeletingSession(false);
+    }
+  }
+
   async function toggleSchedule(schedule: SessionSchedule) {
     await supabase
       .from("session_schedules")
@@ -414,10 +448,24 @@ export default function TeacherPanel() {
                     <div className="muted">Koniec: {formatSessionDate(selectedSession.expires_at)}</div>
                   )}
                 </div>
-                {selectedSession.status !== "closed" && (
-                  <button className="btn btn-danger" onClick={closeSession}>Zamknij</button>
-                )}
+                <div className="session-actions">
+                  {selectedSession.status !== "closed" && (
+                    <button className="btn btn-danger" onClick={closeSession}>Zamknij</button>
+                  )}
+                  {selectedSession.status === "closed" && (
+                    <button
+                      className="btn btn-delete"
+                      onClick={deleteSession}
+                      disabled={deletingSession}
+                      title="Trwale usuń chat wraz z wiadomościami i załącznikami"
+                    >
+                      {deletingSession ? "Usuwanie…" : "Usuń"}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {deleteError && <div className="error session-delete-error">{deleteError}</div>}
 
               <label className="checkbox">
                 <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />

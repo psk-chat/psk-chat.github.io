@@ -1,4 +1,4 @@
-# Mam pytanko — PWA + Web Push
+# Pytaj na zajęciach — PWA + Web Push
 
 ## 1. Baza
 Masz poprzednią wersję? Uruchom w Supabase SQL Editor:
@@ -162,3 +162,15 @@ git add .
 git commit -m "Add chat scheduling and Moodle codes"
 git push
 ```
+
+## Usuwanie starych chatów
+
+Panel prowadzącego pokazuje przycisk **Usuń** tylko dla zamkniętych chatów. Operacja usuwa sesję, wszystkie wątki i wiadomości (przez `ON DELETE CASCADE`) oraz pliki załączników z prywatnego bucketa `chat-attachments`.
+
+Po aktualizacji wdroż dodatkową Edge Function:
+
+```powershell
+npx supabase functions deploy delete-session
+```
+
+Funkcja wymaga zalogowanego prowadzącego i przed usunięciem sprawdza, czy chat należy do niego i ma status `closed`.
