@@ -513,3 +513,32 @@ select:focus { border-color: #3b82f6; }
   .qr-box { flex-direction: column; align-items: stretch; }
   .qr-box svg { align-self: center; }
 }
+
+/* Pakiet 2: archiwum + eksport PDF */
+.btn-tab-active {
+  background: #1d4ed8;
+  border: 1px solid #3b82f6;
+  color: #fff;
+}
+
+.chat-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.archive-readonly {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: .9rem;
+}
+
+@media (max-width: 600px) {
+  .chat-header-actions { width: 100%; }
+  .chat-header-actions .btn { flex: 1; }
+}

@@ -62,6 +62,8 @@ export default function TeacherPanel() {
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [createError, setCreateError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [archiveView, setArchiveView] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
   const navigate = useNavigate();
 
@@ -317,6 +319,144 @@ export default function TeacherPanel() {
     setReply((current) => current.trim() ? `${current.trim()}\n${text}` : text);
   }
 
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function formatPdfDate(value: string) {
+    return new Intl.DateTimeFormat("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date(value));
+  }
+
+  function openPrintDocument(title: string, body: string) {
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) throw new Error("Przeglądarka zablokowała okno eksportu. Zezwól na wyskakujące okna.");
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; color: #111; font-size: 11pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 6px; }
+  h2 { font-size: 14pt; margin: 24px 0 8px; border-bottom: 1px solid #bbb; padding-bottom: 4px; }
+  .meta { color: #555; margin-bottom: 18px; }
+  .message { margin: 7px 0; padding: 8px 10px; border-radius: 8px; page-break-inside: avoid; border: 1px solid #ddd; }
+  .student { background: #f5f5f5; }
+  .teacher { background: #eef6ff; }
+  .author { font-weight: 700; font-size: 9pt; margin-bottom: 3px; }
+  .content { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .attachment { color: #555; font-style: italic; margin-top: 4px; }
+  .empty { color: #777; font-style: italic; }
+  .footer { margin-top: 28px; color: #777; font-size: 9pt; }
+  @media print { .no-print { display:none !important; } }
+</style>
+</head>
+<body>${body}</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  }
+
+  async function exportThreadPdf() {
+    if (!selectedSession || !selectedThread) return;
+    setExportingPdf(true);
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("thread_id", selectedThread.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+
+      const rows = (data ?? []) as Message[];
+      const messagesHtml = rows.length
+        ? rows.map((m) => `
+          <div class="message ${m.sender_role === "teacher" ? "teacher" : "student"}">
+            <div class="author">${m.sender_role === "teacher" ? "Prowadzący" : escapeHtml(selectedThread.student_name)} · ${escapeHtml(formatPdfDate(m.created_at))}</div>
+            ${m.content ? `<div class="content">${escapeHtml(m.content)}</div>` : ""}
+            ${m.attachment_url ? '<div class="attachment">Załącznik: obraz</div>' : ""}
+          </div>`).join("")
+        : '<div class="empty">Brak wiadomości.</div>';
+
+      openPrintDocument(
+        `${selectedSession.subject} - ${selectedThread.student_name}`,
+        `<h1>${escapeHtml(selectedSession.subject)}</h1>
+         <div class="meta">Kod: ${escapeHtml(selectedSession.code)} · ${escapeHtml(formatPdfDate(selectedSession.starts_at))}</div>
+         <h2>${escapeHtml(selectedThread.student_name)}</h2>
+         ${messagesHtml}
+         <div class="footer">Wygenerowano: ${escapeHtml(formatPdfDate(new Date().toISOString()))}</div>`
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
+  async function exportSessionPdf() {
+    if (!selectedSession) return;
+    setExportingPdf(true);
+    try {
+      const { data: allThreads, error: threadError } = await supabase
+        .from("threads")
+        .select("*")
+        .eq("session_id", selectedSession.id)
+        .order("created_at", { ascending: true });
+      if (threadError) throw threadError;
+
+      const sessionThreads = (allThreads ?? []) as Thread[];
+      let sections = "";
+
+      for (const thread of sessionThreads) {
+        const { data: threadMessages, error: messageError } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("thread_id", thread.id)
+          .order("created_at", { ascending: true });
+        if (messageError) throw messageError;
+
+        const rows = (threadMessages ?? []) as Message[];
+        const messagesHtml = rows.length
+          ? rows.map((m) => `
+            <div class="message ${m.sender_role === "teacher" ? "teacher" : "student"}">
+              <div class="author">${m.sender_role === "teacher" ? "Prowadzący" : escapeHtml(thread.student_name)} · ${escapeHtml(formatPdfDate(m.created_at))}</div>
+              ${m.content ? `<div class="content">${escapeHtml(m.content)}</div>` : ""}
+              ${m.attachment_url ? '<div class="attachment">Załącznik: obraz</div>' : ""}
+            </div>`).join("")
+          : '<div class="empty">Brak wiadomości.</div>';
+
+        sections += `<h2>${escapeHtml(thread.student_name)}</h2>${messagesHtml}`;
+      }
+
+      if (!sessionThreads.length) sections = '<div class="empty">Brak rozmów w tych zajęciach.</div>';
+
+      openPrintDocument(
+        `${selectedSession.subject} - eksport rozmów`,
+        `<h1>${escapeHtml(selectedSession.subject)}</h1>
+         <div class="meta">Kod: ${escapeHtml(selectedSession.code)} · Start: ${escapeHtml(formatPdfDate(selectedSession.starts_at))}${selectedSession.expires_at ? ` · Koniec: ${escapeHtml(formatPdfDate(selectedSession.expires_at))}` : ""}</div>
+         ${sections}
+         <div class="footer">Wygenerowano: ${escapeHtml(formatPdfDate(new Date().toISOString()))}</div>`
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   const selectedJoinUrl = selectedSession
     ? `${window.location.origin}/#/join?code=${encodeURIComponent(selectedSession.code)}`
     : "";
@@ -330,12 +470,50 @@ export default function TeacherPanel() {
     [threads, onlyOpen]
   );
 
+  const activeSessions = useMemo(
+    () => sessions.filter((s) => s.status !== "closed"),
+    [sessions]
+  );
+
+  const archivedSessions = useMemo(
+    () => sessions.filter((s) => s.status === "closed"),
+    [sessions]
+  );
+
+  const listedSessions = archiveView ? archivedSessions : activeSessions;
+
   return (
     <section className="teacher-shell">
       <div className="teacher-toolbar">
         <div className="toolbar-actions">
           <button className="btn btn-primary" onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? "Anuluj" : "+ Nowy chat"}
+          </button>
+          <button
+            className={`btn ${!archiveView ? "btn-tab-active" : "btn-secondary"}`}
+            onClick={() => {
+              setArchiveView(false);
+              if (selectedSession?.status === "closed") {
+                setSelectedSession(null);
+                setSelectedThread(null);
+                setMessages([]);
+              }
+            }}
+          >
+            Bieżące ({activeSessions.length})
+          </button>
+          <button
+            className={`btn ${archiveView ? "btn-tab-active" : "btn-secondary"}`}
+            onClick={() => {
+              setArchiveView(true);
+              if (selectedSession?.status !== "closed") {
+                setSelectedSession(null);
+                setSelectedThread(null);
+                setMessages([]);
+              }
+            }}
+          >
+            Archiwum ({archivedSessions.length})
           </button>
           <a
             className="btn btn-secondary"
@@ -432,9 +610,13 @@ export default function TeacherPanel() {
 
       <div className="teacher-grid">
         <aside className="card sidebar">
-          <h2>Zajęcia</h2>
+          <h2>{archiveView ? "Archiwum" : "Zajęcia"}</h2>
 
-          {sessions.map((s) => (
+          {listedSessions.length === 0 && (
+            <div className="empty">{archiveView ? "Brak zamkniętych chatów." : "Brak bieżących chatów."}</div>
+          )}
+
+          {listedSessions.map((s) => (
             <button
               className={`session-item ${selectedSession?.id === s.id ? "active" : ""}`}
               key={s.id}
@@ -480,6 +662,15 @@ export default function TeacherPanel() {
                   )}
                   {selectedSession.status === "closed" && (
                     <button
+                      className="btn btn-secondary"
+                      onClick={exportSessionPdf}
+                      disabled={exportingPdf}
+                    >
+                      {exportingPdf ? "Eksport…" : "PDF całych zajęć"}
+                    </button>
+                  )}
+                  {selectedSession.status === "closed" && (
+                    <button
                       className="btn btn-delete"
                       onClick={deleteSession}
                       disabled={deletingSession}
@@ -493,10 +684,12 @@ export default function TeacherPanel() {
 
               {deleteError && <div className="error session-delete-error">{deleteError}</div>}
 
-              <label className="checkbox">
-                <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
-                Tylko otwarte
-              </label>
+              {!archiveView && (
+                <label className="checkbox">
+                  <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
+                  Tylko otwarte
+                </label>
+              )}
 
               <div className="thread-list">
                 {visibleThreads.map((t) => (
@@ -527,9 +720,18 @@ export default function TeacherPanel() {
                   <h2>{selectedThread.student_name}</h2>
                   <span className="muted">{selectedThread.status}</span>
                 </div>
-                <button className="btn btn-secondary" onClick={toggleResolved}>
-                  {selectedThread.status === "resolved" ? "Otwórz ponownie" : "Oznacz jako rozwiązane"}
-                </button>
+                <div className="chat-header-actions">
+                  {selectedSession?.status === "closed" && (
+                    <button className="btn btn-secondary" onClick={exportThreadPdf} disabled={exportingPdf}>
+                      {exportingPdf ? "Eksport…" : "PDF rozmowy"}
+                    </button>
+                  )}
+                  {selectedSession?.status !== "closed" && (
+                    <button className="btn btn-secondary" onClick={toggleResolved}>
+                      {selectedThread.status === "resolved" ? "Otwórz ponownie" : "Oznacz jako rozwiązane"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="messages">
@@ -546,22 +748,26 @@ export default function TeacherPanel() {
                 ))}
               </div>
 
-              <form className="composer" onSubmit={sendReply}>
-                <div className="reply-templates">
-                  {REPLY_TEMPLATES.map((template) => (
-                    <button
-                      type="button"
-                      className="template-chip"
-                      key={template}
-                      onClick={() => applyReplyTemplate(template)}
-                    >
-                      {template}
-                    </button>
-                  ))}
-                </div>
-                <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="Napisz odpowiedź..." />
-                <button className="btn btn-primary">Wyślij</button>
-              </form>
+              {selectedSession?.status !== "closed" ? (
+                <form className="composer" onSubmit={sendReply}>
+                  <div className="reply-templates">
+                    {REPLY_TEMPLATES.map((template) => (
+                      <button
+                        type="button"
+                        className="template-chip"
+                        key={template}
+                        onClick={() => applyReplyTemplate(template)}
+                      >
+                        {template}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="Napisz odpowiedź..." />
+                  <button className="btn btn-primary">Wyślij</button>
+                </form>
+              ) : (
+                <div className="archive-readonly">Chat jest zamknięty — archiwum jest tylko do odczytu.</div>
+              )}
             </>
           )}
         </main>
