@@ -10,7 +10,7 @@ export default function Home() {
 
       <div className="actions">
         <Link className="btn btn-primary" to="/join">Dołącz jako student</Link>
-        <Link className="btn btn-secondary" to="/teacher">Panel prowadzącego</Link>
+        <Link className="btn btn-secondary" to="/teacher/panel">Panel prowadzącego</Link>
       </div>
     </section>
   );
