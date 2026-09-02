@@ -30,8 +30,7 @@ Deno.serve(async (req) => {
     headers: {
       ...corsHeaders,
       "Content-Type": "image/svg+xml; charset=utf-8",
-      "Cache-Control": "public, max-age=300",
-      "Content-Disposition": `inline; filename="chat-${code}.svg"`,
+      "Cache-Control": "public, max-age=300"
     },
   });
 });
