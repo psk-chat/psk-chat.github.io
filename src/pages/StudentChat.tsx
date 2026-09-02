@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { ClipboardEvent, FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import type { Message, Thread } from "../types";
@@ -12,6 +12,7 @@ export default function StudentChat() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
 
   const studentToken = threadId
     ? localStorage.getItem(`student_token_${threadId}`)
@@ -96,9 +97,24 @@ export default function StudentChat() {
     return data.path as string;
   }
 
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const image = Array.from(e.clipboardData.files).find((item) => item.type.startsWith("image/"));
+    if (!image) return;
+
+    const extension = image.type === "image/jpeg" ? "jpg" : image.type.split("/")[1] || "png";
+    const pasted = new File([image], `screenshot-${Date.now()}.${extension}`, { type: image.type });
+    setFile(pasted);
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     if (!threadId || !studentToken || (!content.trim() && !file)) return;
+
+    if (Date.now() < cooldownUntil) {
+      setError("Odczekaj chwilę przed wysłaniem kolejnej wiadomości.");
+      return;
+    }
 
     setBusy(true);
     setError("");
@@ -117,6 +133,7 @@ export default function StudentChat() {
 
       setContent("");
       setFile(null);
+      setCooldownUntil(Date.now() + 2000);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nie udało się wysłać wiadomości.");
@@ -164,6 +181,7 @@ export default function StudentChat() {
             placeholder="Napisz pytanie..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onPaste={handlePaste}
             rows={3}
           />
 
@@ -173,7 +191,7 @@ export default function StudentChat() {
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
 
-          {file && <small>Załącznik: {file.name}</small>}
+          {file && <small>Załącznik: {file.name} · możesz wkleić screenshot bezpośrednio przez Ctrl+V</small>}
           {error && <div className="error">{error}</div>}
 
           <button className="btn btn-primary" disabled={busy}>

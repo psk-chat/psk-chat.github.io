@@ -174,3 +174,9 @@ npx supabase functions deploy delete-session
 ```
 
 Funkcja wymaga zalogowanego prowadzącego i przed usunięciem sprawdza, czy chat należy do niego i ma status `closed`.
+
+
+## Pakiet UX 1: QR, szablony, schowek, spam guard
+
+Po aktualizacji uruchom w Supabase SQL Editor plik `supabase/migrations/20260902_add_spam_guard.sql`.
+QR prowadzi do `/#/join?code=XXXXX`, więc kod jest automatycznie wpisany. Student może wkleić screenshot do pola wiadomości przez Ctrl+V.

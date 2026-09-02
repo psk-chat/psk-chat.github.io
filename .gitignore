@@ -21,3 +21,8 @@ Thumbs.db
 *.tsbuildinfo
 .vite/
 .cache/
+
+# Generated Vite config artifacts
+/vite.config.js
+/vite.config.d.ts
+/vite.config.js.map

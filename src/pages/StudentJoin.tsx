@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { makeStudentToken } from "../utils";
 
@@ -9,6 +9,12 @@ export default function StudentJoin() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const initialCode = new URLSearchParams(location.search).get("code");
+    if (initialCode) setCode(initialCode.toUpperCase().slice(0, 5));
+  }, [location.search]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

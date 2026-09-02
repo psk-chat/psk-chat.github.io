@@ -480,3 +480,36 @@ select:focus { border-color: #3b82f6; }
   .session-actions { width: 100%; }
   .session-actions .btn { flex: 1; }
 }
+
+
+/* Pakiet UX: QR + szablony odpowiedzi */
+.qr-box {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0 16px;
+  padding: 14px;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+}
+.qr-box svg { flex: 0 0 auto; }
+.qr-details { display: grid; gap: 8px; min-width: 0; }
+.qr-details .muted { color: #475569; }
+.qr-details a { color: #1d4ed8; overflow-wrap: anywhere; font-size: .82rem; }
+.reply-templates { display: flex; gap: 7px; flex-wrap: wrap; }
+.template-chip {
+  border: 1px solid #334155;
+  background: #111827;
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: .78rem;
+}
+.template-chip:hover { border-color: #3b82f6; color: #fff; }
+@media (max-width: 600px) {
+  .qr-box { flex-direction: column; align-items: stretch; }
+  .qr-box svg { align-self: center; }
+}
