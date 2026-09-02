@@ -340,14 +340,11 @@ export default function TeacherPanel() {
   }
 
   function openPrintDocument(title: string, body: string) {
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!printWindow) throw new Error("Przeglądarka zablokowała okno eksportu. Zezwól na wyskakujące okna.");
-
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
+    const html = `<!doctype html>
 <html lang="pl">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>
   @page { size: A4; margin: 16mm; }
@@ -364,14 +361,27 @@ export default function TeacherPanel() {
   .attachment { color: #555; font-style: italic; margin-top: 4px; }
   .empty { color: #777; font-style: italic; }
   .footer { margin-top: 28px; color: #777; font-size: 9pt; }
-  @media print { .no-print { display:none !important; } }
+  .print-toolbar { position: sticky; top: 0; display: flex; gap: 8px; justify-content: flex-end; padding: 10px; margin: -16mm -16mm 16px; background: #fff; border-bottom: 1px solid #ddd; }
+  .print-toolbar button { border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; font: inherit; background: #111827; color: #fff; }
+  @media print { .no-print { display:none !important; } .print-toolbar { display:none !important; } }
 </style>
 </head>
-<body>${body}</body>
-</html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    window.setTimeout(() => printWindow.print(), 250);
+<body>
+  <div class="print-toolbar no-print"><button onclick="window.print()">Zapisz / drukuj PDF</button></div>
+  ${body}
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, "_blank");
+
+    if (!printWindow) {
+      URL.revokeObjectURL(url);
+      throw new Error("Przeglądarka zablokowała okno eksportu. Zezwól na wyskakujące okna.");
+    }
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function exportThreadPdf() {
