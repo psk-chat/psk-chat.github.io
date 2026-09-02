@@ -1,4 +1,4 @@
-const CACHE_NAME = "student-chat-v2";
+const CACHE_NAME = "student-chat-v3";
 const APP_SHELL = ["./", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -22,25 +22,35 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   let data = {
-    title: "Nowe pytanie",
-    body: "Student wysłał wiadomość.",
-    url: "./#/teacher/panel"
+    title: "Nowa wiadomość",
+    body: "Masz nowe powiadomienie.",
+    url: "./#/teacher/panel",
+    badgeCount: null,
   };
 
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {}
 
-  event.waitUntil(
+  const tasks = [];
+
+  if (Number.isFinite(Number(data.badgeCount)) && self.navigator?.setAppBadge) {
+    const count = Number(data.badgeCount);
+    tasks.push(count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge?.());
+  }
+
+  tasks.push(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: "./icons/icon-192.png",
       badge: "./icons/badge-96.png",
-      tag: data.tag || "student-chat-message",
+      tag: data.tag || "student-chat-notification",
       renotify: true,
       data: { url: data.url || "./#/teacher/panel" }
     })
   );
+
+  event.waitUntil(Promise.all(tasks.filter(Boolean)));
 });
 
 self.addEventListener("notificationclick", (event) => {

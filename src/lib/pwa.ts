@@ -82,3 +82,25 @@ export async function getPushState() {
     subscribed: !!subscription
   } as const;
 }
+
+export async function syncTeacherAppBadge() {
+  if (!("setAppBadge" in navigator)) return;
+
+  const { count, error } = await supabase
+    .from("threads")
+    .select("id", { count: "exact", head: true })
+    .eq("unread_for_teacher", true);
+
+  if (error) return;
+  const unread = count ?? 0;
+
+  try {
+    if (unread > 0) {
+      await (navigator as Navigator & { setAppBadge: (count?: number) => Promise<void> }).setAppBadge(unread);
+    } else if ("clearAppBadge" in navigator) {
+      await (navigator as Navigator & { clearAppBadge: () => Promise<void> }).clearAppBadge();
+    }
+  } catch {
+    // Badging API nie jest dostępne na wszystkich platformach/przeglądarkach.
+  }
+}

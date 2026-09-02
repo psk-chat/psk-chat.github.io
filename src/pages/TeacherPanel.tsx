@@ -5,6 +5,7 @@ import type { Message, Session, SessionSchedule, Thread } from "../types";
 import { formatTime, generateCode } from "../utils";
 import AttachmentImage from "../components/AttachmentImage";
 import PushSettings from "../components/PushSettings";
+import { syncTeacherAppBadge } from "../lib/pwa";
 
 type CreateMode = "now" | "scheduled" | "weekly";
 
@@ -99,6 +100,7 @@ export default function TeacherPanel() {
       .order("created_at", { ascending: true });
 
     setThreads((data ?? []) as Thread[]);
+    void syncTeacherAppBadge();
   }
 
   async function loadMessages(threadId: string) {
@@ -114,6 +116,8 @@ export default function TeacherPanel() {
       .from("threads")
       .update({ unread_for_teacher: false })
       .eq("id", threadId);
+
+    void syncTeacherAppBadge();
   }
 
   useEffect(() => {
