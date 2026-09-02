@@ -1,6 +1,6 @@
 {
-  "name": "Pytaj na zajęciach",
-  "short_name": "Pytaj",
+  "name": "Mam pytanko",
+  "short_name": "Pytanko",
   "description": "Prywatny chat student–prowadzący podczas zajęć",
   "start_url": "./",
   "scope": "./",

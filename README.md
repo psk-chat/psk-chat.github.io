@@ -1,4 +1,4 @@
-# Pytaj na zajęciach — PWA + Web Push
+# Mam pytanko — PWA + Web Push
 
 ## 1. Baza
 Masz poprzednią wersję? Uruchom w Supabase SQL Editor:

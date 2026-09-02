@@ -1,5 +1,5 @@
 -- ==========================================================
--- PYTAJ NA ZAJĘCIACH - SUPABASE SQL
+-- MAM PYTANKO - SUPABASE SQL
 -- Uruchom cały plik w SQL Editor w Supabase.
 -- ==========================================================
 

@@ -9,7 +9,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link to="/" className="brand">💬 Pytaj na zajęciach</Link>
+        <Link to="/" className="brand">💬 Mam pytanko</Link>
       </header>
 
       <main className="main">
