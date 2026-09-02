@@ -1,4 +1,4 @@
-import { ClipboardEvent, FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import type { Message, Thread } from "../types";
@@ -98,14 +98,26 @@ export default function StudentChat() {
   }
 
 
-  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    const image = Array.from(e.clipboardData.files).find((item) => item.type.startsWith("image/"));
-    if (!image) return;
+  useEffect(() => {
+    function handlePaste(e: globalThis.ClipboardEvent) {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imageItem = items.find((item) => item.kind === "file" && item.type.startsWith("image/"));
+      const image = imageItem?.getAsFile()
+        ?? Array.from(e.clipboardData?.files ?? []).find((item) => item.type.startsWith("image/"));
 
-    const extension = image.type === "image/jpeg" ? "jpg" : image.type.split("/")[1] || "png";
-    const pasted = new File([image], `screenshot-${Date.now()}.${extension}`, { type: image.type });
-    setFile(pasted);
-  }
+      if (!image) return;
+
+      const extension = image.type === "image/jpeg" ? "jpg" : image.type.split("/")[1] || "png";
+      const pasted = new File([image], `screenshot-${Date.now()}.${extension}`, { type: image.type || "image/png" });
+
+      setFile(pasted);
+      setError("");
+      e.preventDefault();
+    }
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -181,7 +193,6 @@ export default function StudentChat() {
             placeholder="Napisz pytanie..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            onPaste={handlePaste}
             rows={3}
           />
 

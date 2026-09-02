@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
         status: session.status,
         starts_at: session.starts_at,
         expires_at: session.expires_at,
+        qr_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/session-qr?code=${encodeURIComponent(session.code)}`,
       };
     }
   }
@@ -51,7 +52,10 @@ Deno.serve(async (req) => {
   return Response.json({
     generated_at: now.toISOString(),
     by_name: byName,
-    sessions: data ?? [],
+    sessions: (data ?? []).map((session) => ({
+      ...session,
+      qr_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/session-qr?code=${encodeURIComponent(session.code)}`,
+    })),
   }, {
     headers: {
       ...corsHeaders,

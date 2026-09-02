@@ -5,7 +5,6 @@ import type { Message, Session, SessionSchedule, Thread } from "../types";
 import { formatTime, generateCode } from "../utils";
 import AttachmentImage from "../components/AttachmentImage";
 import PushSettings from "../components/PushSettings";
-import { QRCodeSVG } from "qrcode.react";
 
 type CreateMode = "now" | "scheduled" | "weekly";
 
@@ -64,7 +63,6 @@ export default function TeacherPanel() {
   const [createError, setCreateError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingSession, setDeletingSession] = useState(false);
-  const [showQr, setShowQr] = useState(false);
   const navigate = useNavigate();
 
   async function ensureAuth() {
@@ -323,6 +321,10 @@ export default function TeacherPanel() {
     ? `${window.location.origin}/#/join?code=${encodeURIComponent(selectedSession.code)}`
     : "";
 
+  const selectedQrUrl = selectedSession
+    ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/session-qr?code=${encodeURIComponent(selectedSession.code)}`
+    : "";
+
   const visibleThreads = useMemo(
     () => onlyOpen ? threads.filter((t) => t.status === "open") : threads,
     [threads, onlyOpen]
@@ -467,8 +469,11 @@ export default function TeacherPanel() {
                   )}
                 </div>
                 <div className="session-actions">
-                  <button className="btn btn-secondary" onClick={() => setShowQr((value) => !value)}>
-                    {showQr ? "Ukryj QR" : "Pokaż QR"}
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => window.open(selectedQrUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    Pokaż QR
                   </button>
                   {selectedSession.status !== "closed" && (
                     <button className="btn btn-danger" onClick={closeSession}>Zamknij</button>
@@ -487,20 +492,6 @@ export default function TeacherPanel() {
               </div>
 
               {deleteError && <div className="error session-delete-error">{deleteError}</div>}
-
-              {showQr && selectedSession && (
-                <div className="qr-box">
-                  <QRCodeSVG value={selectedJoinUrl} size={180} marginSize={2} />
-                  <div className="qr-details">
-                    <strong>Zeskanuj, aby dołączyć</strong>
-                    <span className="muted">Kod zostanie wpisany automatycznie.</span>
-                    <a href={selectedJoinUrl} target="_blank" rel="noreferrer">{selectedJoinUrl}</a>
-                    <button className="btn btn-secondary" onClick={() => navigator.clipboard.writeText(selectedJoinUrl)}>
-                      Kopiuj link
-                    </button>
-                  </div>
-                </div>
-              )}
 
               <label className="checkbox">
                 <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
