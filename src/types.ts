@@ -2,9 +2,28 @@ export type Session = {
   id: string;
   code: string;
   subject: string;
-  status: "active" | "closed";
+  status: "scheduled" | "active" | "closed";
   created_at: string;
+  starts_at: string;
   expires_at: string | null;
+  auto_close: boolean;
+  publish_code: boolean;
+  schedule_id: string | null;
+};
+
+export type SessionSchedule = {
+  id: string;
+  subject: string;
+  weekday: number;
+  start_time: string;
+  duration_minutes: number;
+  auto_close: boolean;
+  publish_code: boolean;
+  active: boolean;
+  starts_on: string;
+  ends_on: string | null;
+  timezone: string;
+  created_at: string;
 };
 
 export type Thread = {

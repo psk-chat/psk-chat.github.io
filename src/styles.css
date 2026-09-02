@@ -375,3 +375,77 @@ input:focus, textarea:focus {
   .push-box { align-items:stretch; flex-direction:column; }
   .push-box .btn { width:100%; }
 }
+
+select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #374151;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 12px 14px;
+  outline: none;
+}
+
+select:focus { border-color: #3b82f6; }
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.create-session-card,
+.schedules-card {
+  padding: 18px;
+}
+
+.create-session-card h2,
+.schedules-card h2 {
+  margin-top: 0;
+}
+
+.create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.create-options {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.hint {
+  margin: 10px 0 14px;
+  color: #93c5fd;
+  font-size: .9rem;
+}
+
+.schedule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.schedule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #293548;
+  border-radius: 12px;
+  background: #0f172a;
+}
+
+.session-item small {
+  color: #64748b;
+}
+
+@media (max-width: 700px) {
+  .create-grid { grid-template-columns: 1fr; }
+  .schedule-row { align-items: stretch; flex-direction: column; }
+  .toolbar-actions { width: 100%; }
+  .toolbar-actions .btn { flex: 1; text-align: center; }
+}

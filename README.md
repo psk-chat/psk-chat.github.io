@@ -76,3 +76,89 @@ Student: dołącz kodem i wyślij wiadomość.
 Telefon powinien dostać np.:
 `💬 Jan Kowalski`
 `Bazy danych: Nie rozumiem JOIN-a`
+
+---
+
+# Harmonogram chatów (09.2026)
+
+Nowa wersja obsługuje:
+
+- chat uruchamiany od razu,
+- chat jednorazowy zaplanowany na datę i godzinę,
+- chat cykliczny co tydzień,
+- domyślne automatyczne zamknięcie po 120 minutach,
+- opcję „Nie zamykaj automatycznie”,
+- publiczny JSON z aktualnymi/najbliższymi kodami do użycia np. w Moodle.
+
+## 1. Włącz Supabase Cron
+
+W Supabase Dashboard wejdź w **Integrations -> Cron** i włącz moduł Cron (`pg_cron`).
+
+## 2. Uruchom migrację
+
+Dla istniejącej bazy uruchom w SQL Editor tylko:
+
+`supabase/migrations/20260902_add_scheduling.sql`
+
+Migracja utworzy tabelę `session_schedules`, rozbuduje `sessions`, doda funkcje harmonogramu i — jeśli Cron jest już aktywny — job `process-chat-schedule` wykonywany co minutę.
+
+Jeżeli Cron włączyłeś dopiero po migracji, uruchom dodatkowo:
+
+`supabase/migrations/20260902_enable_scheduler_job.sql`
+
+## 3. Wdróż endpoint JSON
+
+```powershell
+npx supabase functions deploy session-codes --no-verify-jwt
+```
+
+Endpoint jest publiczny celowo: zwraca wyłącznie kody chatów oznaczonych w panelu jako „Udostępniaj kod w JSON dla Moodle”. Nie zwraca studentów ani wiadomości.
+
+Adres:
+
+```text
+https://ezdyecervwhyohtixwlo.supabase.co/functions/v1/session-codes
+```
+
+Można filtrować po dokładnej nazwie zajęć:
+
+```text
+https://ezdyecervwhyohtixwlo.supabase.co/functions/v1/session-codes?name=Bazy%20danych%2012A
+```
+
+Przykładowa odpowiedź:
+
+```json
+{
+  "generated_at": "2026-09-02T10:00:00.000Z",
+  "by_name": {
+    "Bazy danych 12A": {
+      "code": "K7P4X",
+      "status": "active",
+      "starts_at": "2026-09-02T10:00:00.000Z",
+      "expires_at": "2026-09-02T12:00:00.000Z"
+    }
+  },
+  "sessions": []
+}
+```
+
+Dla zajęć cyklicznych kolejne wystąpienia otrzymują nowe kody. Funkcja harmonogramu utrzymuje wygenerowane wystąpienia na najbliższe 21 dni.
+
+## 4. Frontend
+
+W panelu prowadzącego przycisk **+ Nowy chat** pozwala wybrać:
+
+- **Uruchom teraz**,
+- **Jednorazowo o danej godzinie**,
+- **Co tydzień**.
+
+Domyślny czas trwania to 120 minut. Można go zmienić albo zaznaczyć **Nie zamykaj automatycznie**.
+
+Po zmianach wypchnij projekt normalnie na GitHub:
+
+```powershell
+git add .
+git commit -m "Add chat scheduling and Moodle codes"
+git push
+```

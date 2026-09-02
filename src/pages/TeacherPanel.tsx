@@ -1,20 +1,58 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import type { Message, Session, Thread } from "../types";
+import type { Message, Session, SessionSchedule, Thread } from "../types";
 import { formatTime, generateCode } from "../utils";
 import AttachmentImage from "../components/AttachmentImage";
 import PushSettings from "../components/PushSettings";
 
+type CreateMode = "now" | "scheduled" | "weekly";
+
+const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
+
+function toLocalInputValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function localDateParts(value: string) {
+  const date = new Date(value);
+  const jsDay = date.getDay();
+  const isoWeekday = jsDay === 0 ? 7 : jsDay;
+  return {
+    date,
+    isoWeekday,
+    startsOn: value.slice(0, 10),
+    startTime: value.slice(11, 16),
+  };
+}
+
+function formatSessionDate(value: string) {
+  return new Intl.DateTimeFormat("pl-PL", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export default function TeacherPanel() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [schedules, setSchedules] = useState<SessionSchedule[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
   const [subject, setSubject] = useState("Zajęcia");
+  const [createMode, setCreateMode] = useState<CreateMode>("now");
+  const [startsAt, setStartsAt] = useState(toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)));
+  const [durationMinutes, setDurationMinutes] = useState(120);
+  const [neverClose, setNeverClose] = useState(false);
+  const [publishCode, setPublishCode] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
   const [onlyOpen, setOnlyOpen] = useState(false);
+  const [createError, setCreateError] = useState("");
   const navigate = useNavigate();
 
   async function ensureAuth() {
@@ -26,9 +64,18 @@ export default function TeacherPanel() {
     const { data } = await supabase
       .from("sessions")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("starts_at", { ascending: false });
 
     setSessions((data ?? []) as Session[]);
+  }
+
+  async function loadSchedules() {
+    const { data } = await supabase
+      .from("session_schedules")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    setSchedules((data ?? []) as SessionSchedule[]);
   }
 
   async function loadThreads(sessionId: string) {
@@ -60,6 +107,7 @@ export default function TeacherPanel() {
   useEffect(() => {
     ensureAuth();
     loadSessions();
+    loadSchedules();
   }, []);
 
   useEffect(() => {
@@ -76,9 +124,7 @@ export default function TeacherPanel() {
       }, () => loadThreads(selectedSession.id))
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [selectedSession?.id]);
 
   useEffect(() => {
@@ -98,45 +144,87 @@ export default function TeacherPanel() {
       })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [selectedThread?.id]);
+
+  async function uniqueCode() {
+    for (let i = 0; i < 10; i++) {
+      const code = generateCode();
+      const { data } = await supabase.from("sessions").select("id").eq("code", code).maybeSingle();
+      if (!data) return code;
+    }
+    throw new Error("Nie udało się wygenerować kodu. Spróbuj ponownie.");
+  }
 
   async function createSession(e: FormEvent) {
     e.preventDefault();
+    setCreateError("");
+
+    const cleanSubject = subject.trim();
+    if (!cleanSubject) return setCreateError("Podaj nazwę zajęć.");
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return;
 
-    let code = generateCode();
-
-    for (let i = 0; i < 5; i++) {
-      const { data } = await supabase
-        .from("sessions")
-        .select("id")
-        .eq("code", code)
-        .maybeSingle();
-
-      if (!data) break;
-      code = generateCode();
+    if (createMode !== "now" && !startsAt) {
+      return setCreateError("Wybierz datę i godzinę rozpoczęcia.");
     }
 
-    const { data, error } = await supabase
-      .from("sessions")
-      .insert({
-        code,
-        subject: subject.trim(),
-        teacher_id: auth.user.id,
-        status: "active",
-        expires_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
-      })
-      .select("*")
-      .single();
+    try {
+      if (createMode === "weekly") {
+        const parts = localDateParts(startsAt);
+        if (parts.date.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+          return setCreateError("Pierwsze zajęcia nie mogą być w przeszłości.");
+        }
 
-    if (!error && data) {
-      await loadSessions();
-      setSelectedSession(data as Session);
+        const { error } = await supabase.from("session_schedules").insert({
+          teacher_id: auth.user.id,
+          subject: cleanSubject,
+          weekday: parts.isoWeekday,
+          start_time: `${parts.startTime}:00`,
+          duration_minutes: durationMinutes,
+          auto_close: !neverClose,
+          publish_code: publishCode,
+          starts_on: parts.startsOn,
+          timezone: "Europe/Warsaw",
+        });
+
+        if (error) throw error;
+        await Promise.all([loadSchedules(), loadSessions()]);
+      } else {
+        const start = createMode === "now" ? new Date() : new Date(startsAt);
+        if (createMode === "scheduled" && start.getTime() <= Date.now()) {
+          return setCreateError("Dla zaplanowanego chatu ustaw godzinę w przyszłości.");
+        }
+
+        const code = await uniqueCode();
+        const expires = neverClose
+          ? null
+          : new Date(start.getTime() + durationMinutes * 60_000).toISOString();
+
+        const { data, error } = await supabase
+          .from("sessions")
+          .insert({
+            code,
+            subject: cleanSubject,
+            teacher_id: auth.user.id,
+            status: createMode === "now" ? "active" : "scheduled",
+            starts_at: start.toISOString(),
+            expires_at: expires,
+            auto_close: !neverClose,
+            publish_code: publishCode,
+          })
+          .select("*")
+          .single();
+
+        if (error) throw error;
+        await loadSessions();
+        if (data) setSelectedSession(data as Session);
+      }
+
+      setShowCreate(false);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Nie udało się utworzyć chatu.");
     }
   }
 
@@ -150,41 +238,32 @@ export default function TeacherPanel() {
       content: reply.trim()
     });
 
-    await supabase
-      .from("threads")
-      .update({
-        unread_for_student: true
-      })
-      .eq("id", selectedThread.id);
-
+    await supabase.from("threads").update({ unread_for_student: true }).eq("id", selectedThread.id);
     setReply("");
     await loadMessages(selectedThread.id);
   }
 
   async function toggleResolved() {
     if (!selectedThread) return;
-
     const newStatus = selectedThread.status === "resolved" ? "open" : "resolved";
-
-    await supabase
-      .from("threads")
-      .update({ status: newStatus })
-      .eq("id", selectedThread.id);
-
+    await supabase.from("threads").update({ status: newStatus }).eq("id", selectedThread.id);
     setSelectedThread({ ...selectedThread, status: newStatus });
     if (selectedSession) await loadThreads(selectedSession.id);
   }
 
   async function closeSession() {
     if (!selectedSession) return;
-
-    await supabase
-      .from("sessions")
-      .update({ status: "closed" })
-      .eq("id", selectedSession.id);
-
+    await supabase.from("sessions").update({ status: "closed" }).eq("id", selectedSession.id);
     setSelectedSession({ ...selectedSession, status: "closed" });
     await loadSessions();
+  }
+
+  async function toggleSchedule(schedule: SessionSchedule) {
+    await supabase
+      .from("session_schedules")
+      .update({ active: !schedule.active })
+      .eq("id", schedule.id);
+    await loadSchedules();
   }
 
   async function logout() {
@@ -200,14 +279,102 @@ export default function TeacherPanel() {
   return (
     <section className="teacher-shell">
       <div className="teacher-toolbar">
-        <form onSubmit={createSession} className="inline-form">
-          <input value={subject} onChange={(e) => setSubject(e.target.value)} />
-          <button className="btn btn-primary">Nowe zajęcia</button>
-        </form>
+        <div className="toolbar-actions">
+          <button className="btn btn-primary" onClick={() => setShowCreate((v) => !v)}>
+            {showCreate ? "Anuluj" : "+ Nowy chat"}
+          </button>
+          <a
+            className="btn btn-secondary"
+            href={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/session-codes`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            JSON z kodami
+          </a>
+        </div>
         <button className="btn btn-secondary" onClick={logout}>Wyloguj</button>
       </div>
 
+      {showCreate && (
+        <form onSubmit={createSession} className="card create-session-card">
+          <h2>Utwórz chat</h2>
+          <div className="create-grid">
+            <label>
+              Nazwa / grupa
+              <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="np. Bazy danych 12A" />
+            </label>
+
+            <label>
+              Tryb
+              <select value={createMode} onChange={(e) => setCreateMode(e.target.value as CreateMode)}>
+                <option value="now">Uruchom teraz</option>
+                <option value="scheduled">Jednorazowo o danej godzinie</option>
+                <option value="weekly">Co tydzień</option>
+              </select>
+            </label>
+
+            {createMode !== "now" && (
+              <label>
+                {createMode === "weekly" ? "Pierwsze zajęcia" : "Start"}
+                <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+              </label>
+            )}
+
+            <label>
+              Czas trwania (min)
+              <input
+                type="number"
+                min={15}
+                max={1440}
+                step={15}
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(Number(e.target.value))}
+              />
+            </label>
+          </div>
+
+          <div className="create-options">
+            <label className="checkbox">
+              <input type="checkbox" checked={neverClose} onChange={(e) => setNeverClose(e.target.checked)} />
+              Nie zamykaj automatycznie
+            </label>
+            <label className="checkbox">
+              <input type="checkbox" checked={publishCode} onChange={(e) => setPublishCode(e.target.checked)} />
+              Udostępniaj kod w JSON dla Moodle
+            </label>
+          </div>
+
+          {createMode === "weekly" && (
+            <div className="hint">Powstanie nowy chat i nowy kod co tydzień. Najbliższe wystąpienia są generowane z wyprzedzeniem.</div>
+          )}
+          {createError && <div className="error">{createError}</div>}
+          <button className="btn btn-primary">Utwórz</button>
+        </form>
+      )}
+
       <PushSettings />
+
+      {schedules.length > 0 && (
+        <div className="card schedules-card">
+          <div className="section-title"><h2>Cykliczne zajęcia</h2></div>
+          <div className="schedule-list">
+            {schedules.map((s) => (
+              <div className="schedule-row" key={s.id}>
+                <div>
+                  <strong>{s.subject}</strong>
+                  <div className="muted">
+                    co {WEEKDAYS[s.weekday - 1]} o {s.start_time.slice(0, 5)} · {s.duration_minutes} min
+                    {s.auto_close ? " · auto-zamykanie" : " · bez auto-zamykania"}
+                  </div>
+                </div>
+                <button className="btn btn-secondary" onClick={() => toggleSchedule(s)}>
+                  {s.active ? "Wstrzymaj" : "Wznów"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="teacher-grid">
         <aside className="card sidebar">
@@ -225,6 +392,7 @@ export default function TeacherPanel() {
             >
               <strong>{s.subject}</strong>
               <span>{s.code} · {s.status}</span>
+              <small>{formatSessionDate(s.starts_at)}</small>
             </button>
           ))}
         </aside>
@@ -238,18 +406,21 @@ export default function TeacherPanel() {
                 <div>
                   <h2>{selectedSession.subject}</h2>
                   <div className="big-code">{selectedSession.code}</div>
+                  <div className="muted">
+                    {selectedSession.status === "scheduled" ? "Start: " : "Rozpoczęto: "}
+                    {formatSessionDate(selectedSession.starts_at)}
+                  </div>
+                  {selectedSession.expires_at && (
+                    <div className="muted">Koniec: {formatSessionDate(selectedSession.expires_at)}</div>
+                  )}
                 </div>
-                {selectedSession.status === "active" && (
+                {selectedSession.status !== "closed" && (
                   <button className="btn btn-danger" onClick={closeSession}>Zamknij</button>
                 )}
               </div>
 
               <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={onlyOpen}
-                  onChange={(e) => setOnlyOpen(e.target.checked)}
-                />
+                <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
                 Tylko otwarte
               </label>
 
@@ -289,35 +460,20 @@ export default function TeacherPanel() {
 
               <div className="messages">
                 {messages.map((m) => (
-                  <div
-                    className={`message-row ${m.sender_role === "teacher" ? "mine" : "theirs"}`}
-                    key={m.id}
-                  >
+                  <div className={`message-row ${m.sender_role === "teacher" ? "mine" : "theirs"}`} key={m.id}>
                     <div className="message-bubble">
                       <div className="message-author">
-                        {m.sender_role === "teacher" ? "Ty" : selectedThread.student_name}
-                        {" · "}
-                        {formatTime(m.created_at)}
+                        {m.sender_role === "teacher" ? "Ty" : selectedThread.student_name} · {formatTime(m.created_at)}
                       </div>
                       {m.content && <div>{m.content}</div>}
-                      {m.attachment_url && (
-                        <AttachmentImage
-                          path={m.attachment_url}
-                          threadId={m.thread_id}
-                        />
-                      )}
+                      {m.attachment_url && <AttachmentImage path={m.attachment_url} threadId={m.thread_id} />}
                     </div>
                   </div>
                 ))}
               </div>
 
               <form className="composer" onSubmit={sendReply}>
-                <textarea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  rows={3}
-                  placeholder="Napisz odpowiedź..."
-                />
+                <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="Napisz odpowiedź..." />
                 <button className="btn btn-primary">Wyślij</button>
               </form>
             </>
